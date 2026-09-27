@@ -1,0 +1,232 @@
+============================================================
+CUSTOM TELEGRAM PAID CHANNEL BOT
+1 hour trial → reminder → UPI payment → admin approve → expire par kick
+============================================================
+
+Aapko chahiye:
+- Laptop / PC (Windows / Mac / Linux)
+- Telegram account
+- Python 3.10+  (https://www.python.org/downloads/  — install ke time "Add Python to PATH" tick karo)
+- Apna private channel
+
+
+============================================================
+STEP 1 — Bot banao (BotFather)
+============================================================
+1. Telegram me search: @BotFather
+2. /newbot
+3. Bot ka naam:  My Channel Shop
+4. Username:  mychannelshopbot   (unique hona chahiye, last me bot)
+5. BotFather TOKEN dega, jaise:
+   8123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+6. Token copy karke notepad me save karo.
+
+Bot settings:
+@BotFather me /setprivacy  →  Disable
+@BotFather me /setjoingroups → Enable
+
+
+============================================================
+STEP 2 — Apna Telegram ID nikaalo
+============================================================
+1. Telegram me search: @userinfobot
+2. /start
+3. Jo Id aaye (sirf number) wo ADMIN ID hai.
+   Example:  623451234
+
+
+============================================================
+STEP 3 — Private channel + bot ko admin banao
+============================================================
+1. Naya PRIVATE channel banao (ya purana private karo).
+   Public mat rakho.
+2. Channel name pe tap → Administrators → Add Admin
+3. Apna bot search karke add karo.
+4. YE permissions ON rakho:
+   - Add Subscribers / Invite Users via Link
+   - Ban Users
+   Baaki optional.
+5. Save.
+
+
+============================================================
+STEP 4 — Channel ID nikaalo
+============================================================
+Tareeka A (aasaan):
+1. Channel me koi message forward karo @userinfobot ko
+   (agar channel private hai to pehle bot ko channel me add kar chuke ho)
+2. Ya ye bot use karo: @getidsbot  — channel me add karke ID lo.
+
+Tareeka B:
+1. Channel me koi post karo
+2. Post pe right click → Copy Message Link
+3. Link aisa hota hai: https://t.me/c/1234567890/12
+4. Channel ID banega:  -1001234567890
+   Rule:  -100  +  us number ko chipkao
+   Example: link me 1234567890  →  ID = -1001234567890
+
+ID hamesha minus se start hoti hai: -100...........
+
+
+============================================================
+STEP 5 — Files download / folder
+============================================================
+Is project folder me 3 files hain:
+  bot.py
+  requirements.txt
+  .env.example
+
+Folder kahin bhi rakh do, example:
+  C:\telegram-paid-bot
+
+
+============================================================
+STEP 6 — .env file bharo
+============================================================
+.env.example ko copy karke naam rakho:  .env
+
+Andar values apni daalo (quotes mat lagana):
+
+BOT_TOKEN=8123456789:AAHxxxxxxxx
+CHANNEL_ID=-1001234567890
+ADMIN_IDS=623451234
+UPI_ID=yourname@okaxis
+UPI_NAME=Rahul Sharma
+PLAN_PRICE_INR=199
+PLAN_DAYS=30
+TRIAL_SECONDS=3600
+REMINDER_BEFORE_SECONDS=600
+CHANNEL_INVITE_NAME=Premium Channel
+
+Notes:
+- ADMIN_IDS me multiple admins:  111,222,333
+- TRIAL_SECONDS=3600  matlab 1 hour
+- Test ke liye 120 (2 minute) rakh sakte ho
+- REMINDER_BEFORE_SECONDS=600  matlab trial se 10 min pehle reminder
+
+
+============================================================
+STEP 7 — Python install + bot chalao
+============================================================
+Windows PowerShell / CMD me folder ke andar:
+
+  cd C:\telegram-paid-bot
+  python -m venv venv
+  venv\Scripts\activate
+  pip install -r requirements.txt
+  python bot.py
+
+Mac / Linux:
+
+  cd ~/telegram-paid-bot
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+  python bot.py
+
+Agar "Bot starting..." dikhe to theek hai.
+Window BAND MAT KARNA jab tak bot chalana hai.
+
+
+============================================================
+STEP 8 — Test (2 phone / 2 accounts se)
+============================================================
+1. Apne bot ko Telegram me search karke /start
+2. Bot 1 hour trial link dega
+3. Link se channel join hoga
+4. 10 min pehle reminder aayega (agar TRIAL_SECONDS=3600)
+5. 1 hour baad bot channel se hata dega
+6. Subscribe button → UPI details
+7. User "Maine pay kar diya" + screenshot
+8. Aapke (admin) DM me message aayega
+9. Aap likho:
+
+   /approve 623499999 30
+
+   (user ka ID + kitne din)
+
+10. User ko naya join link mil jayega
+
+
+============================================================
+USER COMMANDS
+============================================================
+/start     trial ya menu
+/status    access kitna bacha
+/whoami    apna Telegram ID
+
+
+============================================================
+ADMIN COMMANDS (sirf ADMIN_IDS wale)
+============================================================
+/approve USER_ID DAYS     example: /approve 612345678 30
+/reject USER_ID
+/kick USER_ID             turant channel se hatao
+
+
+============================================================
+JOIN LINK SHARE KAISE KAREIN
+============================================================
+Public me YE link do, channel ka direct link NAHI:
+
+  https://t.me/YOUR_BOT_USERNAME?start=join
+
+Example:
+  https://t.me/mychannelshopbot?start=join
+
+Isse user pehle bot pe aayega, trial milega, phir channel.
+
+
+============================================================
+BOT 24 HOUR CHALANE KE LIYE
+============================================================
+PC band hone par bot ruk jayega.
+Hamesha chalane ke options:
+
+1) Windows pe PC on rakho + python bot.py
+2) Sasta VPS (Contabo / Hetzner / DigitalOcean) — Ubuntu pe same commands
+3) Railway / Render pe deploy (advanced)
+
+VPS pe background:
+
+  sudo apt update
+  sudo apt install python3-venv python3-pip -y
+  cd /root/telegram-paid-bot
+  python3 -m venv venv
+  source venv/bin/activate
+  pip install -r requirements.txt
+  nohup python bot.py > bot.log 2>&1 &
+
+Dekhne ke liye:  tail -f bot.log
+
+
+============================================================
+AGAR ERROR AAYE
+============================================================
+"Invite link nahi ban paya"
+  → Bot ko channel ADMIN banao + Invite Users ON
+
+"Pehle .env bharo"
+  → .env file usi folder me hai jahan bot.py hai?
+  → CHANNEL_ID number hai? -100 se start?
+
+User kick nahi ho raha
+  → Ban Users permission ON karo
+  → CHANNEL_ID galat to nahi
+
+Bot message nahi bhej raha
+  → User ne /start kiya hona chahiye (DM start)
+
+2 baar trial
+  → Database members.db me trial_used=1 save hota hai
+  → Test reset: members.db delete karke bot restart
+
+
+============================================================
+PRICE / TRIAL BADALNA
+============================================================
+.env me badlo, bot BAND karke phir chalao:
+
+TRIAL_SECONDS=86400          (24 hour trial)
+PLAN_PRICE_INR=299
+PLAN_DAYS=30
