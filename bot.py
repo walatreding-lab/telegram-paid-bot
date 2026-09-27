@@ -411,8 +411,10 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 [InlineKeyboardButton("⬅️ Back", callback_data="status")],
             ]
         )
+        # Fancy text first
         await q.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
 
+        # Send UPI QR code
         from urllib.parse import quote
         upi_data = (
             f"upi://pay?pa={quote(UPI_ID)}"
@@ -451,6 +453,22 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             reply_markup=main_keyboard(row),
         )
         uname = f"@{user.username}" if user.username else user.first_name
+        admin_kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "✅ Approve 30 Days",
+                        callback_data=f"admin_approve:{user.id}:{PLAN_DAYS}",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "❌ Reject",
+                        callback_data=f"admin_reject:{user.id}",
+                    )
+                ],
+            ]
+        )
         for admin_id in ADMIN_IDS:
             try:
                 await context.bot.send_message(
@@ -459,18 +477,105 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                     f"👤 User: {uname}\n"
                     f"🆔 ID: `{user.id}`\n"
                     f"💰 Amount: ₹{PLAN_PRICE_INR}\n\n"
-                    f"✅ Approve: `/approve {user.id} {PLAN_DAYS}`\n"
-                    f"❌ Reject: `/reject {user.id}`",
+                    "Neeche button se Approve / Reject karo:",
                     parse_mode=ParseMode.MARKDOWN,
+                    reply_markup=admin_kb,
                 )
             except TelegramError:
                 pass
+        return
+
+    # ----- Admin Approve / Reject buttons -----
+    if data.startswith("admin_approve:"):
+        if not is_admin(user.id):
+            await q.answer("Sirf admin approve kar sakta hai.", show_alert=True)
+            return
+        try:
+            _, uid_str, days_str = data.split(":")
+            uid = int(uid_str)
+            days = int(days_str)
+        except ValueError:
+            await q.answer("Invalid data", show_alert=True)
+            return
+
+        until = now_ts() + days * 86400
+        upsert_user_id(uid)
+        set_fields(uid, status="paid", paid_until=until)
+        context.job_queue.run_once(
+            job_paid_end,
+            when=max(30, until - now_ts()),
+            data={"user_id": uid},
+            name=f"paidend-{uid}",
+        )
+        try:
+            invite = await create_invite(context)
+            await context.bot.send_message(
+                uid,
+                f"✅ *VVIP Payment Approved!*\n\n"
+                f"🎉 Aapka access *{days} din* ke liye active ho gaya.\n"
+                f"📅 Valid till: `{fmt_time(until)}`\n\n"
+                f"🔗 *Channel Join Link:*\n{invite}\n\n"
+                "Welcome to VVIP family 💎",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except TelegramError as e:
+            await q.edit_message_text(f"User ko message nahi gaya: {e}")
+            return
+
+        await q.edit_message_text(
+            f"✅ *Approved*\n\nUser `{uid}` ko {days} din ka access de diya.\n"
+            f"Valid till: `{fmt_time(until)}`",
+            parse_mode=ParseMode.MARKDOWN,
+        )
+        return
+
+    if data.startswith("admin_reject:"):
+        if not is_admin(user.id):
+            await q.answer("Sirf admin reject kar sakta hai.", show_alert=True)
+            return
+        try:
+            uid = int(data.split(":")[1])
+        except ValueError:
+            await q.answer("Invalid data", show_alert=True)
+            return
+
+        try:
+            await context.bot.send_message(
+                uid,
+                "❌ *Payment Verify Nahi Hui*\n\n"
+                "Sahi amount + clear screenshot dubara bhejo.\n"
+                "Phir *Maine Pay Kar Diya* button dabao.",
+                parse_mode=ParseMode.MARKDOWN,
+            )
+        except TelegramError:
+            pass
+
+        await q.edit_message_text(
+            f"❌ *Rejected*\n\nUser `{uid}` ka payment reject kar diya.",
+            parse_mode=ParseMode.MARKDOWN,
+        )
         return
 
 
 async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     user = update.effective_user
     upsert_user(user)
+    admin_kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "✅ Approve 30 Days",
+                    callback_data=f"admin_approve:{user.id}:{PLAN_DAYS}",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "❌ Reject",
+                    callback_data=f"admin_reject:{user.id}",
+                )
+            ],
+        ]
+    )
     for admin_id in ADMIN_IDS:
         try:
             await context.bot.forward_message(
@@ -480,9 +585,13 @@ async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             await context.bot.send_message(
                 admin_id,
-                f"Screenshot from `{user.id}` ({user.first_name})\n"
-                f"`/approve {user.id} {PLAN_DAYS}`",
+                f"📸 *Screenshot Received*\n\n"
+                f"👤 User: {user.first_name}\n"
+                f"🆔 ID: `{user.id}`\n"
+                f"💰 Amount: ₹{PLAN_PRICE_INR}\n\n"
+                "Neeche button se Approve / Reject karo:",
                 parse_mode=ParseMode.MARKDOWN,
+                reply_markup=admin_kb,
             )
         except TelegramError:
             pass
@@ -560,219 +669,6 @@ async def cmd_reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
             "Sahi amount + clear screenshot dubara bhejo.\n"
             "Phir *Maine Pay Kar Diya* button dabao.",
             parse_mode=ParseMode.MARKDOWN,
-        )
-    except TelegramError:
-        pass
-    await update.message.reply_text(f"Rejected {uid}")
-
-
-async def cmd_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_admin(update.effective_user.id):
-        return
-    if not context.args:
-        await update.message.reply_text("Use: /kick USER_ID")
-        return
-    uid = int(context.args[0])
-    set_fields(uid, status="expired", paid_until=0)
-    await kick_user(context, uid)
-    await update.message.reply_text(f"Removed {uid}")
-
-
-async def cmd_whoami(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    u = update.effective_user
-    await update.message.reply_text(
-        f"Aapka Telegram ID: `{u.id}`\nUsername: @{u.username or '-'}",
-        parse_mode=ParseMode.MARKDOWN,
-    )
-
-
-async def on_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cmu = update.my_chat_member
-    if cmu.chat.id != CHANNEL_ID:
-        return
-    log.info("Bot channel status: %s", cmu.new_chat_member.status)
-
-
-async def on_chat_member(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    cmu = update.chat_member
-    if cmu.chat.id != CHANNEL_ID:
-        return
-    uid = cmu.new_chat_member.user.id
-    status = cmu.new_chat_member.status
-    upsert_user_id(uid)
-    if status in (ChatMemberStatus.MEMBER, ChatMemberStatus.ADMINISTRATOR):
-        set_fields(uid, joined=1)
-    elif status in (ChatMemberStatus.LEFT, ChatMemberStatus.BANNED):
-        set_fields(uid, joined=0)
-
-
-async def restore_jobs(application: Application) -> None:
-    t = now_ts()
-    with db() a(update.effective_user.id)
-    if not row:
-        await update.message.reply_text("Pehle /start dabao.")
-        return
-    await update.message.reply_text(status_text(row), reply_markup=main_keyboard(row))
-
-
-def status_text(row: sqlite3.Row) -> str:
-    return (
-        "👤 Status\n"
-        f"User ID: {row['user_id']}\n"
-        f"State: {row['status']}\n"
-        f"Trial used: {'Haan' if row['trial_used'] else 'Nahi'}\n"
-        f"Trial end: {fmt_time(row['trial_end'])}\n"
-        f"Paid until: {fmt_time(row['paid_until'])}\n"
-        f"Access: {'Active ✅' if access_active(row) else 'Band ❌'}"
-    )
-
-
-async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    q = update.callback_query
-    await q.answer()
-    user = q.from_user
-    upsert_user(user)
-    row = get_user(user.id)
-    data = q.data
-
-    if data == "status":
-        await q.edit_message_text(status_text(row), reply_markup=main_keyboard(row))
-        return
-
-    if data == "getlink":
-        if not access_active(row):
-            await q.edit_message_text(
-                "Access active nahi hai. Pehle subscribe karo.",
-                reply_markup=main_keyboard(row),
-            )
-            return
-        await send_join_link(q, context, "Aapka naya join link:")
-        return
-
-    if data == "plans":
-        text = (
-            "📦 Subscription plan\n\n"
-            f"₹{PLAN_PRICE_INR} — {PLAN_DAYS} din full channel access\n\n"
-            f"UPI ID: `{UPI_ID}`\n"
-            f"Name: {UPI_NAME}\n"
-            f"Amount: ₹{PLAN_PRICE_INR}\n\n"
-            "Pay karke neeche button dabao. Admin verify karke access dega."
-        )
-        kb = InlineKeyboardMarkup(
-            [
-                [InlineKeyboardButton("✅ Maine pay kar diya", callback_data="paid")],
-                [InlineKeyboardButton("⬅️ Back", callback_data="status")],
-            ]
-        )
-        await q.edit_message_text(text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb)
-        return
-
-    if data == "paid":
-        set_fields(user.id, status="pending")
-        await q.edit_message_text(
-            "Payment request admin ko bhej di.\n"
-            "Screenshot yahin bhej do (photo). Approval ke baad access mil jayega.",
-            reply_markup=main_keyboard(row),
-        )
-        uname = f"@{user.username}" if user.username else user.first_name
-        for admin_id in ADMIN_IDS:
-            try:
-                await context.bot.send_message(
-                    admin_id,
-                    "💳 New payment claim\n"
-                    f"User: {uname}\n"
-                    f"ID: `{user.id}`\n"
-                    f"Amount: ₹{PLAN_PRICE_INR}\n\n"
-                    f"Approve: `/approve {user.id} {PLAN_DAYS}`\n"
-                    f"Reject: `/reject {user.id}`",
-                    parse_mode=ParseMode.MARKDOWN,
-                )
-            except TelegramError:
-                pass
-        return
-
-
-async def on_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user = update.effective_user
-    upsert_user(user)
-    caption = update.message.caption or "Payment screenshot"
-    for admin_id in ADMIN_IDS:
-        try:
-            await context.bot.forward_message(
-                chat_id=admin_id,
-                from_chat_id=update.effective_chat.id,
-                message_id=update.message.message_id,
-            )
-            await context.bot.send_message(
-                admin_id,
-                f"Screenshot from `{user.id}` ({user.first_name})\n"
-                f"`/approve {user.id} {PLAN_DAYS}`",
-                parse_mode=ParseMode.MARKDOWN,
-            )
-        except TelegramError:
-            pass
-    await update.message.reply_text("Screenshot admin ko mil gaya. Wait for approval.")
-
-
-async def cmd_approve(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_admin(update.effective_user.id):
-        return
-    if len(context.args) < 1:
-        await update.message.reply_text("Use: /approve USER_ID [DAYS]")
-        return
-    try:
-        uid = int(context.args[0])
-        days = int(context.args[1]) if len(context.args) > 1 else PLAN_DAYS
-    except ValueError:
-        await update.message.reply_text("IDs numbers hone chahiye.")
-        return
-
-    until = now_ts() + days * 86400
-    upsert_user_id(uid)
-    set_fields(uid, status="paid", paid_until=until)
-    context.job_queue.run_once(
-        job_paid_end,
-        when=max(30, until - now_ts()),
-        data={"user_id": uid},
-        name=f"paidend-{uid}",
-    )
-    try:
-        invite = await create_invite(context)
-        await context.bot.send_message(
-            uid,
-            f"✅ Payment approved.\nAccess {days} din ke liye active.\n"
-            f"Valid till: {fmt_time(until)}\n\n🔗 {invite}",
-        )
-    except TelegramError as e:
-        await update.message.reply_text(f"User ko message nahi gaya: {e}")
-        return
-    await update.message.reply_text(f"Approved {uid} till {fmt_time(until)}")
-
-
-def upsert_user_id(user_id: int) -> None:
-    with db() as conn:
-        conn.execute(
-            """
-            INSERT INTO users (user_id, status, created_at)
-            VALUES (?, 'new', ?)
-            ON CONFLICT(user_id) DO NOTHING
-            """,
-            (user_id, now_ts()),
-        )
-        conn.commit()
-
-
-async def cmd_reject(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not is_admin(update.effective_user.id):
-        return
-    if not context.args:
-        await update.message.reply_text("Use: /reject USER_ID")
-        return
-    uid = int(context.args[0])
-    try:
-        await context.bot.send_message(
-            uid,
-            "❌ Payment verify nahi hui. Sahi amount + screenshot dubara bhejo.",
         )
     except TelegramError:
         pass
